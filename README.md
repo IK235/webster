@@ -9,7 +9,7 @@
 
 ## 🌟 Live Demo
 
-**👉 [Try Webster Live](https://webster.vercel.app)** ← Click to analyze any webpage
+**👉 [Try Webster Live](https://webster-sigma.vercel.app)** ← Click to analyze any webpage
 
 ## ✨ What Makes Webster Different
 
@@ -161,7 +161,7 @@ This project demonstrates advanced React and web development patterns:
 
 ## 🚀 Deployment
 
-Deployed on Vercel at: **[webster.vercel.app](https://webster.vercel.app)**
+Deployed on Vercel at: **[webster-sigma.vercel.app](https://webster-sigma.vercel.app)**
 
 ### Deploy Your Own
 
