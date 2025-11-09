@@ -17,13 +17,50 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
  */
 async function scrapeWebpage(url) {
   try {
-    // Use CORS proxy to bypass CORS restrictions
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+    // Validate URL format
+    try {
+      new URL(url)
+    } catch (e) {
+      throw new Error('Invalid URL format')
+    }
 
-    const response = await fetch(proxyUrl)
-    if (!response.ok) throw new Error(`Failed to fetch: ${response.statusText}`)
+    // List of CORS proxies to try (in order)
+    const proxies = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      `https://cors-anywhere.herokuapp.com/${url}`,
+      `https://corsproxy.io/?${encodeURIComponent(url)}`
+    ]
 
-    const html = await response.text()
+    let html = null
+    let lastError = null
+
+    // Try each proxy in sequence
+    for (const proxyUrl of proxies) {
+      try {
+        const response = await fetch(proxyUrl, {
+          headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        })
+
+        if (response.ok) {
+          html = await response.text()
+          if (html && html.length > 10) {
+            console.log(`Successfully scraped with proxy: ${proxyUrl.split('/')[2]}`)
+            break
+          }
+        }
+      } catch (error) {
+        lastError = error
+        console.log(`Proxy failed: ${proxyUrl.split('/')[2]} - trying next...`)
+        continue
+      }
+    }
+
+    if (!html || html.length < 10) {
+      throw new Error(`Failed to fetch webpage. ${lastError ? lastError.message : 'All proxies failed or returned empty content.'}`)
+    }
 
     // Parse HTML and extract text content
     const parser = new DOMParser()
