@@ -144,23 +144,50 @@ Content: ${content}`
     const data = await response.json()
     const analysisText = data.choices[0].message.content
 
-    // Parse JSON from response
-    const jsonMatch = analysisText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('Could not parse AI response')
+    // Parse JSON from response - try multiple patterns
+    let analysis = null
+
+    try {
+      // First try: direct JSON.parse (if response is pure JSON)
+      analysis = JSON.parse(analysisText)
+    } catch (e) {
+      // Second try: extract JSON from text
+      const jsonMatch = analysisText.match(/\{[\s\S]*?\n\}/m)
+      if (jsonMatch) {
+        try {
+          analysis = JSON.parse(jsonMatch[0])
+        } catch (parseErr) {
+          // Third try: be more lenient with the regex
+          const altMatch = analysisText.match(/\{(.|\n)*\}/m)
+          if (altMatch) {
+            analysis = JSON.parse(altMatch[0])
+          } else {
+            throw new Error('Could not extract JSON from response')
+          }
+        }
+      } else {
+        throw new Error('No JSON found in response')
+      }
     }
 
-    const analysis = JSON.parse(jsonMatch[0])
+    // Validate and sanitize response
+    const summary = String(analysis.summary || analysis.Summary || '').substring(0, 500)
+    const keywords = Array.isArray(analysis.keywords)
+      ? analysis.keywords.slice(0, 5)
+      : (String(analysis.keywords || '').split(/[,;]/).map(k => k.trim()).filter(k => k).slice(0, 5))
+    const sentiment = String(analysis.sentiment || analysis.Sentiment || 'neutral').toLowerCase()
+    const insights = String(analysis.insights || analysis.Insights || '').substring(0, 500)
 
     return {
       url,
       title,
-      summary: analysis.summary,
-      keywords: Array.isArray(analysis.keywords) ? analysis.keywords : analysis.keywords.split(',').map(k => k.trim()),
-      sentiment: analysis.sentiment,
-      insights: analysis.insights
+      summary: summary || 'No summary available',
+      keywords: keywords.length > 0 ? keywords : ['analysis', 'content'],
+      sentiment: ['positive', 'negative', 'neutral', 'mixed'].includes(sentiment) ? sentiment : 'neutral',
+      insights: insights || 'No specific insights available'
     }
   } catch (error) {
+    console.error('Analysis error details:', error)
     throw new Error(`AI Analysis failed: ${error.message}`)
   }
 }
