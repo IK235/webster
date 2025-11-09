@@ -24,42 +24,51 @@ async function scrapeWebpage(url) {
       throw new Error('Invalid URL format')
     }
 
-    // List of CORS proxies to try (in order)
+    // List of CORS proxies (ordered by speed/reliability)
     const proxies = [
       `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-      `https://cors-anywhere.herokuapp.com/${url}`,
-      `https://corsproxy.io/?${encodeURIComponent(url)}`
+      `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      `https://cors-anywhere.herokuapp.com/${url}`
     ]
 
-    let html = null
-    let lastError = null
-
-    // Try each proxy in sequence
-    for (const proxyUrl of proxies) {
-      try {
-        const response = await fetch(proxyUrl, {
+    // Fetch with timeout for each proxy
+    const fetchWithTimeout = (url, timeout = 8000) => {
+      return Promise.race([
+        fetch(url, {
           headers: {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
-        })
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Proxy timeout')), timeout)
+        )
+      ])
+    }
+
+    let html = null
+
+    // Try proxies in sequence with timeout (not parallel to save resources)
+    for (const proxyUrl of proxies) {
+      try {
+        console.log(`Fetching from: ${proxyUrl.split('/')[2]}...`)
+        const response = await fetchWithTimeout(proxyUrl)
 
         if (response.ok) {
           html = await response.text()
           if (html && html.length > 10) {
-            console.log(`Successfully scraped with proxy: ${proxyUrl.split('/')[2]}`)
+            console.log(`✓ Successfully scraped with: ${proxyUrl.split('/')[2]}`)
             break
           }
         }
       } catch (error) {
-        lastError = error
-        console.log(`Proxy failed: ${proxyUrl.split('/')[2]} - trying next...`)
+        console.log(`✗ Failed (${error.message}): ${proxyUrl.split('/')[2]}`)
         continue
       }
     }
 
     if (!html || html.length < 10) {
-      throw new Error(`Failed to fetch webpage. ${lastError ? lastError.message : 'All proxies failed or returned empty content.'}`)
+      throw new Error('Failed to scrape webpage. Please try again or check the URL.')
     }
 
     // Parse HTML and extract text content
@@ -98,16 +107,15 @@ async function scrapeWebpage(url) {
  */
 async function analyzeWithGroq(content, url, title) {
   try {
-    const prompt = `Analyze this webpage content and provide:
-1. A concise summary (2-3 sentences)
-2. List of 5-7 key keywords/topics
-3. Overall sentiment (positive, negative, neutral, mixed)
-4. Key insights and main takeaways
+    const prompt = `Analyze this content briefly in JSON format only:
+{
+  "summary": "2-3 sentence overview",
+  "keywords": ["max 5 key topics"],
+  "sentiment": "positive|negative|neutral|mixed",
+  "insights": "main takeaway"
+}
 
-Content:
-${content}
-
-Provide response as JSON with keys: summary, keywords (array), sentiment, insights`
+Content: ${content}`
 
     const response = await fetch(GROQ_API_URL, {
       method: 'POST',
@@ -123,8 +131,8 @@ Provide response as JSON with keys: summary, keywords (array), sentiment, insigh
             content: prompt
           }
         ],
-        temperature: 0.7,
-        max_tokens: 1024
+        temperature: 0.3,
+        max_tokens: 300
       })
     })
 
